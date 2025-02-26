@@ -1,0 +1,8 @@
+.git
+.gitignore
+README.md
+*.test
+tmp/
+vendor/
+.env
+*.log
