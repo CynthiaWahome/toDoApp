@@ -1,0 +1,157 @@
+services:
+  traefik:
+    image: traefik:v2.9
+    ports:
+      - "8090:8090"     # HTTP
+      - "8443:8443"     # HTTPS
+      - "9000:8080"     # Dashboard (changed from 8080 to avoid nginx conflict)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.toml:/etc/traefik/traefik.toml
+      - ./acme.json:/acme.json
+    networks:
+      - todoapp-net
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`dashboard.${BASE_URL}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_AUTH}"
+
+  # Frontend
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+    environment:
+      - PORT=${FRONTEND_PORT:-3000}
+      - AUTH_API_ADDRESS=http://auth-api:8081
+      - TODOS_API_ADDRESS=http://todos-api:8082
+    depends_on:
+      - auth-api
+      - todos-api
+    networks:
+      - todoapp-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${BASE_URL}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.services.frontend.loadbalancer.server.port=${FRONTEND_PORT:-3000}"
+      - "traefik.http.routers.frontend.tls=true"
+
+  # Auth API
+  auth-api:
+    build: ./auth-api
+    ports:
+      - "${AUTH_API_PORT}:${AUTH_API_PORT}"
+    environment:
+      - AUTH_API_PORT=${AUTH_API_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - USERS_API_ADDRESS=http://users-api:8083
+      - BASE_URL=${BASE_URL}
+    depends_on:
+      - users-api
+    networks:
+      - todoapp-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-api.rule=Host(`auth.${BASE_URL}`) || (Host(`${BASE_URL}`) && PathPrefix(`/api/auth`))"
+      - "traefik.http.routers.auth-api.entrypoints=websecure"
+      - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
+      - "traefik.http.services.auth-api.loadbalancer.server.port=${AUTH_API_PORT}"
+      - "traefik.http.routers.auth-api-path.middlewares=auth-api-strip"
+      - "traefik.http.middlewares.auth-api-strip.stripprefix.prefixes=/api/auth"
+
+
+  # Users API
+  users-api:
+    build: ./users-api
+    ports:
+      - "${USERS_API_PORT}:${USERS_API_PORT}"
+    environment:
+      - SERVER_PORT=${USERS_API_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - BASE_URL=${BASE_URL}
+    networks:
+      - todoapp-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-api.rule=Host(`users.${BASE_URL}`) || (Host(`${BASE_URL}`) && PathPrefix(`/api/users`))"
+      - "traefik.http.routers.users-api.entrypoints=websecure"
+      - "traefik.http.routers.users-api.tls.certresolver=myresolver"
+      - "traefik.http.services.users-api.loadbalancer.server.port=${USERS_API_PORT}"
+      - "traefik.http.routers.users-api-path.middlewares=users-api-strip"
+      - "traefik.http.middlewares.users-api-strip.stripprefix.prefixes=/api/users"
+
+  # Todos API
+  todos-api:
+    build: ./todos-api
+    ports:
+      - "${TODOS_API_PORT}:${TODOS_API_PORT}"
+    environment:
+      - TODOS_API_PORT=${TODOS_API_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_CHANNEL=${REDIS_CHANNEL}
+      - ZIPKIN_URL=${ZIPKIN_URL}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.todos-api.rule=Host(`${BASE_URL}`) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api.entrypoints=websecure"
+      - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
+      - "traefik.http.services.todos-api.loadbalancer.server.port=${TODOS_API_PORT}"
+      - "traefik.http.routers.todos-api-path.middlewares=todos-api-strip"
+      - "traefik.http.middlewares.todos-api-strip.stripprefix.prefixes=/api/todos"
+    depends_on:
+      - ${REDIS_HOST}
+      - zipkin
+    networks:
+      - todoapp-net
+
+  # Redis Queue
+  redis-queue:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - todoapp-net
+
+  # Log Message Processor
+  log-message-processor:
+    build: ./log-message-processor
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_CHANNEL=${REDIS_CHANNEL}
+      - ZIPKIN_URL=${ZIPKIN_URL}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ${REDIS_HOST}
+      - zipkin
+    networks:
+      - todoapp-net
+
+  # Zipkin - Added as requested
+  zipkin:
+    image: openzipkin/zipkin
+    ports:
+      - "${ZIPKIN_PORT:-9411}:${ZIPKIN_PORT:-9411}"
+    environment:
+      - ZIPKIN_PORT=${ZIPKIN_PORT:-9411}
+      - BASE_URL=${BASE_URL}
+    networks:
+      - todoapp-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zipkin.rule=Host(`zipkin.${BASE_URL}`)"
+      - "traefik.http.routers.zipkin.entrypoints=websecure"
+      - "traefik.http.routers.zipkin.tls.certresolver=myresolver"
+      - "traefik.http.services.zipkin.loadbalancer.server.port=${ZIPKIN_PORT:-9411}"
+
+networks:
+  todoapp-net:
