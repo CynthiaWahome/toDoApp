@@ -1,0 +1,5 @@
+**/.mvn/dummy.txt
+**/mvnw
+**/mvnw.cmd
+.env
+acme.json
