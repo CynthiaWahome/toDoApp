@@ -24,7 +24,9 @@ services:
 
   # Frontend
   frontend:
-    build: ./frontend
+    build:
+      context: ./users-api
+      dockerfile: Dockerfile
     ports:
       - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
     environment:
@@ -45,7 +47,9 @@ services:
 
   # Auth API
   auth-api:
-    build: ./auth-api
+    build:
+      context: ./users-api
+      dockerfile: Dockerfile
     ports:
       - "${AUTH_API_PORT}:${AUTH_API_PORT}"
     environment:
@@ -69,7 +73,9 @@ services:
 
   # Users API
   users-api:
-    build: ./users-api
+    build:
+      context: ./users-api
+      dockerfile: Dockerfile
     ports:
       - "${USERS_API_PORT}:${USERS_API_PORT}"
     environment:
