@@ -3,12 +3,14 @@ WORKDIR /app
 
 # Copy only pom.xml first
 COPY pom.xml .
-COPY .mvn/ .mvn/
-COPY mvnw .
-COPY mvnw.cmd .
+#COPY .mvn/ .mvn/
+#COPY mvnw .
+#COPY mvnw.cmd .
 
-# Download dependencies (cached layer)
-RUN mvn dependency:go-offline -B
+# Check if pom.xml exists before running Maven
+RUN if [ -f "pom.xml" ]; then mvn dependency:go-offline -B; else echo "No pom.xml found, skipping dependency download"; fi
+
+
 
 # Copy source code
 COPY src ./src
