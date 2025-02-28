@@ -1,15 +1,14 @@
-FROM python:3.9
+FROM p
+FROM python:3.7
 
 WORKDIR /app
 
-# Copy only the requirements file first
 COPY requirements.txt .
 
-# Install dependencies
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-deps py_zipkin==0.11.0 redis==2.10.6 requests && \
+    pip install thriftpy2
 
-# Copy the rest of the application code
 COPY . .
 
-# Run the application
 CMD ["python", "main.py"]
