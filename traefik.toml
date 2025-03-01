@@ -1,0 +1,25 @@
+[entryPoints]
+  [entryPoints.web]
+    address = ":8090"
+    [entryPoints.web.http.redirections.entryPoint]
+      to = "websecure"
+      scheme = "https"
+  [entryPoints.websecure]
+    address = ":8443"
+    [entryPoints.websecure.http.tls]
+      certResolver = "myresolver"
+
+[api]
+  dashboard = true
+  insecure = true  # For testing only
+
+[providers.docker]
+  endpoint = "unix:///var/run/docker.sock"
+  exposedByDefault = false
+  network = "todoapp-net"
+
+[certificatesResolvers.myresolver.acme]
+  email = "mebiga5093@envoes.com"
+  storage = "acme.json"
+  [certificatesResolvers.myresolver.acme.httpChallenge]
+    entryPoint = "web"
