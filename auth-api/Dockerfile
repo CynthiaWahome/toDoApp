@@ -1,25 +1,32 @@
-# filepath: auth-api/Dockerfile
-FROM golang:1.21-alpine AS builder
+# Use Go 1.21.1 as the base image
+FROM golang:1.21.1-alpine AS builder
 
+# Set working directory
 WORKDIR /app
 
+# Copy the Go module files
 COPY go.mod go.sum ./
 
-RUN go mod download && go mod verify
+# Download dependencies
+RUN go mod download
 
+# Copy all source files into the container
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-w -s" -o auth-api
+# Build the application
+RUN go build -o auth-api .
 
-FROM alpine:latest AS runtime
+# Use a smaller base image for the final runtime
+FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates
-
+# Set working directory
 WORKDIR /app
 
+# Copy the built binary from the builder stage
 COPY --from=builder /app/auth-api .
 
+# Expose the required port
 EXPOSE 8081
 
+# Start the auth-api application
 CMD ["./auth-api"]
